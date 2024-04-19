@@ -14,7 +14,7 @@ import scala.concurrent.Future
 import scala.util.Random
 import scala.concurrent.ExecutionContext.Implicits.global
 
-@main def go = readBinaryFile()
+@main def go = readBinaryFile("C:\\Users\\theoa\\Editing\\edit\\resources\\test.CR2")
 
 // object EditFx extends JFXApp3 {
 //   override def start(): Unit = {
