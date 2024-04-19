@@ -107,17 +107,24 @@ class CR2Header(header: Array[Byte]) {
 }
 
 class IFDReader(val startOffset: Long, val filename: String) {
+
+  // Find number of entries
   val numEntries = {
     val buffer = getNBytes(filename, startOffset, 2)
     (mask(buffer(0)) | (mask(buffer(1)) << 8))
   } 
+
+  // Setup array of entries
   val entries = new Array[IDFEntry](numEntries)
   setupEntries()
+
+  // Find next IFD offset
   val nextIFDOffset = {
     val buffer = getNBytes(filename, startOffset + 2 + 12 * numEntries, 4)
     mask(buffer(0)) | (mask(buffer(1)) << 8) | (mask(buffer(2)) << 16) | (mask(buffer(3)) << 24)
   }
   
+  // Setup each entry
   private def setupEntries(): Unit = {
     val bis = BufferedInputStream(FileInputStream(filename))
     bis.skip(startOffset + 2)
@@ -127,9 +134,15 @@ class IFDReader(val startOffset: Long, val filename: String) {
       if (bytesRead < 12) {
         println(s"Error reading entry $i")
       } else {
-        entries(i) = new IDFEntry(buffer)
+        entries(i) = IDFEntry(buffer)
       }
     }
+  }
+
+  def getEntryData(entryId: Int): Array[Byte] = {
+    val entry = entries(entryId)
+    val entryData = getNBytes(filename, entry.valueOffset, entry.numValues * entry.tagTypeByteSize)
+    entryData
   }
 
   override def toString: String = {
@@ -161,7 +174,7 @@ class IFDReader(val startOffset: Long, val filename: String) {
     11 = float, 4 bytes, IEEE format
     12 = float, 8 bytes, IEEE format
 */
-class IDFEntry(val entry: Array[Byte]) {
+case class IDFEntry(val entry: Array[Byte]) {
   val tag = mask(entry(0)) | (mask(entry(1)) << 8)
   val tagType = mask(entry(2)) | (mask(entry(3)) << 8)
   val numValues = mask(entry(4)) | (mask(entry(5)) << 8) | (mask(entry(6)) << 16) | (mask(entry(7)) << 24)
@@ -176,23 +189,23 @@ class IDFEntry(val entry: Array[Byte]) {
     s"-----------------------"
   }
 
-  
   // Map tag types to byte lengths
   // 0 -> variable length
-  val tagTypeMap: Map[Int, String] = Map(
-    1 -> 1  // unsigned char
-    2 -> 0  // string
-    3 -> 2  // unsigned short
-    4 -> 4  // unsigned long
-    5 -> 8  // unsigned rationnal 
-    6 -> 1  // signed char
-    7 -> 0  // byte sequence
-    8 -> 2  // signed short
-    9 -> 4  // signed long
-    10 -> 8 // signed rationnal 
-    11 -> 4 // float, 4 bytes
+  val tagTypeMap: Map[Int, Int] = Map(
+    1 -> 1,  // unsigned char
+    2 -> 0,  // string
+    3 -> 2,  // unsigned short
+    4 -> 4,  // unsigned long
+    5 -> 8,  // unsigned rationnal 
+    6 -> 1,  // signed char
+    7 -> 0,  // byte sequence
+    8 -> 2,  // signed short
+    9 -> 4,  // signed long
+    10 -> 8, // signed rationnal 
+    11 -> 4, // float, 4 bytes
     12 -> 8 // float, 8 bytes
   )
+  def tagTypeByteSize = tagTypeMap(tagType)
 
   // Map tag numbers to tag names and number of type length
   // 0 -> variable length
@@ -274,5 +287,25 @@ class IDFEntry(val entry: Array[Byte]) {
     EF 70-200mm f4L IS USM = 38 02 9D 09 92 0C 0C 0E FF 0F
     EF 50mm f1.8 II        = LETS FIND OUT WOO
   */
-  
+  def tagName: Option[String] = {
+    tagMap.get(tag) match {
+      case Some((name, _)) => Some(name) 
+      case None => None
+    }
+  }
+  def tagLength: Option[Int] = {
+    tagMap.get(tag) match {
+      case Some((_, length)) => Some(length)
+      case None => None
+    }
+  }
 }
+
+object IDFEntry {
+  def apply(entry: Array[Byte]): IDFEntry = new IDFEntry(entry)
+
+  def unapply(entry: IDFEntry): Option[(Int, Int, Long, Long)] = {
+    Some((entry.tag, entry.tagType, entry.numValues, entry.valueOffset))
+  }
+}
+
