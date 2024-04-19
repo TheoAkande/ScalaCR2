@@ -30,7 +30,11 @@ class ByteArrayEntry(name: String, data: Array[Byte]) extends Entry(name, data) 
   val value: Array[Byte] = data
 
   override def toString: String = {
-    s"$name: ${value.mkString(" ")}"
+    var s = s"$name: "
+    for (i <- value.indices) {
+      s += f"${value(i)}%x "
+    }
+    s
   }
 }
 
@@ -57,7 +61,7 @@ class MultiShortEntry(name: String, data: Array[Byte]) extends Entry(name, data)
   }.toList
 
   override def toString: String = {
-    s"$name: ${values.mkString(" ")}"
+    s"$name: ${values.mkString(", ")}"
   }
 }
 
@@ -67,6 +71,6 @@ class MultiLongEntry(name: String, data: Array[Byte]) extends Entry(name, data) 
   }.toList
 
   override def toString: String = {
-    s"$name: ${values.mkString(" ")}"
+    s"$name: ${values.mkString(", ")}"
   }
 }
