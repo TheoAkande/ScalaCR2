@@ -19,7 +19,7 @@ class IFDReader(val startOffset: Long, val filename: String, verbose: Boolean = 
 
   // Setup array of entries
   val entries = new Array[IDFEntry](numEntries)
-  setupEntries()
+  val (exif, gps, makernote) = setupEntries()
 
   // Find next IFD offset
   val nextIFDOffset = {
@@ -28,18 +28,28 @@ class IFDReader(val startOffset: Long, val filename: String, verbose: Boolean = 
   }
 
   // Setup each entry
-  private def setupEntries(): Unit = {
+  private def setupEntries(): (Long, Long, Long) = {
     val bis = BufferedInputStream(FileInputStream(filename))
     bis.skip(startOffset + 2)
     val buffer = new Array[Byte](12)
+    var exift: Long = 0
+    var gpst: Long = 0
+    var makernotet: Long = 0
     for (i <- 0 until numEntries) {
       val bytesRead = bis.read(buffer)
       if (bytesRead < 12) {
         println(s"Error reading entry $i")
       } else {
         entries(i) = IDFEntry(buffer, filename, verbose)
+        entries(i).tagMapEntry match {
+          case (Some("EXIF IFD", _)) => exift = entries(i).entry.getLong
+          case (Some("GPS IFD", _))  => gpst  = entries(i).entry.getLong
+          case (Some("Maker Note", _)) => makernotet = entries(i).entry.getLong
+          case _                     => ()
+        }
       }
     }
+    (exift, gpst, makernotet)
   }
 
   override def toString: String = {
@@ -94,8 +104,9 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
 
   // Map tag numbers to tag names and number of type length
   // 0 -> variable length
+  // negative -> Do not display; Unknown
   val tagMap: Map[Int, (String, Int)] = Map[Int, (String, Int)](
-    // TIFF tags
+    // TIFF 0 tags
     0x0100 -> ("Image Width", 1),
     0x0101 -> ("Image Length", 1),
     0x0102 -> ("Bits Per Sample", 3),
@@ -117,6 +128,7 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
     0x013b -> ("Artist", 0),
     0x8769 -> ("EXIF IFD", 1),
     0x8825 -> ("GPS IFD", 1),
+    0x8298 -> ("Unkown", -1),
     
     // EXIF tags
     0x829a -> ("Exposure Time", 1),
@@ -134,7 +146,22 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
     0x4001 -> ("Colour Balance", 0),
     0x4013 -> ("AF Micro Adj", 5),
     0x4015 -> ("Vignette Correction", 0), // 116, but 66 for G11 and S90
-    0x0083 -> ("Original Decision Data", 1) // seemingly
+    0x0083 -> ("Original Decision Data", 1), // seemingly
+
+    // TIFF 1 tags
+    0x0201 -> ("Thumbnail Offset", 1),
+    0x0202 -> ("Thumbnail Length", 1),
+
+    // TIFF 2 tags
+    0xc5d9 -> ("Unknown", -1),
+    0xc6c5 -> ("Unknown", -3),
+    0xc6dc -> ("Unknown", -4),
+
+    //TIFF 3 tags
+    0xc5d8 -> ("Unknown", -1),
+    0xc5e0 -> ("Unknown", -1),
+    0xc640 -> ("CR2 slice ([0] * [1] strips, then 1 [2] strip)", 3),
+    0xc6c5 -> ("Unknown", -1)
 
   ) 
   // Take a look at docs for tag 0x0083
@@ -179,16 +206,30 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
   val valueOffset = mask(idata(8)) | (mask(idata(9)) << 8) | (mask(idata(10)) << 16) | (mask(idata(11)) << 24)
   val dataSize = numValues * tagTypeByteSize
   var imm = true
+  // Generate Entry data
   val entry = try {
-    if (dataSize <= 4 && dataSize > 0) {
-      val darr = new Array[Byte](dataSize)
-      for (i <- 0 until dataSize) {
-        darr(i) = mask(idata(8 + i)).toByte
+    // Do not generate for unknown tags
+    (tag, tagLength) match {
+      case (0x927c, _) => {
+        val darr = new Array[Byte](4)
+        for (i <- 0 until 4) {
+          darr(i) = mask(idata(8 + i)).toByte
+        }
+        new OneLongEntry("Maker Note", darr)
       }
-      getEntry(darr)
-    } else {
-      imm = false
-      getEntry(getNBytes(filename, valueOffset, dataSize))
+      case (_, Some(n)) if (n > 0) => {
+        if (dataSize <= 4 && dataSize > 0) {    // Immediate data
+          val darr = new Array[Byte](dataSize)
+          for (i <- 0 until dataSize) {
+            darr(i) = mask(idata(8 + i)).toByte
+          }
+          getEntry(darr)
+        } else {  // Indirect datac
+          imm = false
+          getEntry(getNBytes(filename, valueOffset, dataSize))
+        } 
+      }
+      case _ => null
     }
   } catch {
     case e: InvalidEntryException => {
@@ -197,7 +238,7 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
     }
   }
 
-  private def getEntry(data: Array[Byte]): Entry = {
+  private def getEntry(data: Array[Byte]): Entry[?] = {
 
     // Create Entry object
     (tagMapEntry, tagType) match {

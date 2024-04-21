@@ -44,7 +44,7 @@ class CR2Image(filename: String, verbose: Boolean = false) {
   println(header)
 
   // Gather IDF entries
-  val idfs = new Array[IFDReader](4)
+  val idfs = new Array[IFDReader](6)
   var next = header.tiffOffset
   var i = 0
   while (next != 0) {
@@ -56,6 +56,15 @@ class CR2Image(filename: String, verbose: Boolean = false) {
     next = tiffIDF.nextIFDOffset
     i += 1
   }
+  val exifIDF = new IFDReader(idfs(0).exif, filename, verbose)
+  println()
+  println(s"EXIF IDF")
+  println(exifIDF)
+  val makernoteIDF = new IFDReader(exifIDF.makernote, filename, verbose)
+  println()
+  println(s"MAKERNOTE IDF")
+  println(makernoteIDF)
+  val gpsInfo
 }
 
 /*
