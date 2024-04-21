@@ -64,7 +64,7 @@ class CR2Image(filename: String, verbose: Boolean = false) {
   println()
   println(s"MAKERNOTE IDF")
   println(makernoteIDF)
-  val gpsInfo
+  println(makernoteIDF.vignette)
 }
 
 /*

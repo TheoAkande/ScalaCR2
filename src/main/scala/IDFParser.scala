@@ -19,7 +19,7 @@ class IFDReader(val startOffset: Long, val filename: String, verbose: Boolean = 
 
   // Setup array of entries
   val entries = new Array[IDFEntry](numEntries)
-  val (exif, gps, makernote) = setupEntries()
+  val (exif, gps, makernote, vignette) = setupEntries()
 
   // Find next IFD offset
   val nextIFDOffset = {
@@ -28,13 +28,14 @@ class IFDReader(val startOffset: Long, val filename: String, verbose: Boolean = 
   }
 
   // Setup each entry
-  private def setupEntries(): (Long, Long, Long) = {
+  private def setupEntries(): (Long, Long, Long, VignetteData) = {
     val bis = BufferedInputStream(FileInputStream(filename))
     bis.skip(startOffset + 2)
     val buffer = new Array[Byte](12)
     var exift: Long = 0
     var gpst: Long = 0
     var makernotet: Long = 0
+    var vignettet: VignetteData = null
     for (i <- 0 until numEntries) {
       val bytesRead = bis.read(buffer)
       if (bytesRead < 12) {
@@ -43,13 +44,14 @@ class IFDReader(val startOffset: Long, val filename: String, verbose: Boolean = 
         entries(i) = IDFEntry(buffer, filename, verbose)
         entries(i).tagMapEntry match {
           case (Some("EXIF IFD", _)) => exift = entries(i).entry.getLong
-          case (Some("GPS IFD", _))  => gpst  = entries(i).entry.getLong
+          case (Some("GPS Pointer", _))  => gpst  = entries(i).entry.getLong
           case (Some("Maker Note", _)) => makernotet = entries(i).entry.getLong
+          case (Some("Vignette Correction", _)) => vignettet = VignetteData(entries(i).entry)
           case _                     => ()
         }
       }
     }
-    (exift, gpst, makernotet)
+    (exift, gpst, makernotet, vignettet)
   }
 
   override def toString: String = {
@@ -112,8 +114,8 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
     0x0102 -> ("Bits Per Sample", 3),
     0x0103 -> ("Compression", 1),
     0x0106 -> ("Photometric Interpretation", 1),
-    0x010f -> ("Make", 0),
-    0x0110 -> ("Model", 0),
+    0x010f -> ("Make", 1),
+    0x0110 -> ("Model", 1),
     0x0111 -> ("Strip Offsets", 1),
     0x0112 -> ("Orientation", 1),     // 1 -> (0,0) is top left
     0x0115 -> ("Samples Per Pixel", 1),
@@ -123,11 +125,11 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
     0x011b -> ("Y Resolution", 1),
     0x011c -> ("Planar Configuration", 1),
     0x0128 -> ("Resolution Unit", 1), // 2 -> pixels per inche
-    0x0131 -> ("Software", 0),
+    0x0131 -> ("Software", 1),
     0x0132 -> ("DateTime", 20),
-    0x013b -> ("Artist", 0),
+    0x013b -> ("Artist", 1),
     0x8769 -> ("EXIF IFD", 1),
-    0x8825 -> ("GPS IFD", 1),
+    0x8825 -> ("GPS Pointer", 1),
     0x8298 -> ("Unkown", -1),
     
     // EXIF tags
@@ -143,9 +145,9 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
     0x0006 -> ("Image Type", 15),
     0x0097 -> ("Dust Delete Data", 1024),
     0x00e0 -> ("Sensor Info", 17),
-    0x4001 -> ("Colour Balance", 0),
+    0x4001 -> ("Colour Balance", 1),
     0x4013 -> ("AF Micro Adj", 5),
-    0x4015 -> ("Vignette Correction", 0), // 116, but 66 for G11 and S90
+    0x4015 -> ("Vignette Correction", 1), // 116, but 66 for G11 and S90
     0x0083 -> ("Original Decision Data", 1), // seemingly
 
     // TIFF 1 tags
@@ -229,7 +231,13 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
           getEntry(getNBytes(filename, valueOffset, dataSize))
         } 
       }
-      case _ => null
+      case (_, None) => { // unknown tag
+        // println(f"Unknown tag 0x$tag%x")
+        null
+      }
+      case _ => { // dont want to generate
+        null
+      }
     }
   } catch {
     case e: InvalidEntryException => {
@@ -238,7 +246,7 @@ case class IDFEntry(val idata: Array[Byte], filename: String, verbose: Boolean) 
     }
   }
 
-  private def getEntry(data: Array[Byte]): Entry[?] = {
+  private def getEntry(data: Array[Byte]): Entry = {
 
     // Create Entry object
     (tagMapEntry, tagType) match {

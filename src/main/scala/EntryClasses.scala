@@ -1,6 +1,6 @@
 package editer
 
-abstract class Entry[T](val name: String, val data: Array[Byte]) {
+abstract class Entry(val name: String, val data: Array[Byte]) {
   def getShort: Int = mask(data(0)) | mask(data(1)) << 8
   def getLong:  Long  = mask(data(0)) | mask(data(1)) << 8 | mask(data(2)) << 16 | mask(data(3)) << 24
   def getBytes: Array[Byte] = data
@@ -21,7 +21,7 @@ abstract class Entry[T](val name: String, val data: Array[Byte]) {
 //   }
 // }
 
-class OneLongEntry(name: String, data: Array[Byte]) extends Entry[Long](name, data) {
+class OneLongEntry(name: String, data: Array[Byte]) extends Entry(name, data) {
   lazy val value: Long = getLong
 
   override def toString: String = {
@@ -29,7 +29,7 @@ class OneLongEntry(name: String, data: Array[Byte]) extends Entry[Long](name, da
   }
 }
 
-class OneShortEntry(name: String, data: Array[Byte]) extends Entry[Short](name, data) {
+class OneShortEntry(name: String, data: Array[Byte]) extends Entry(name, data) {
   lazy val value: Int = getShort
 
   override def toString: String = {
@@ -37,7 +37,7 @@ class OneShortEntry(name: String, data: Array[Byte]) extends Entry[Short](name, 
   }
 }
 
-class ByteArrayEntry(name: String, data: Array[Byte]) extends Entry[Array[Byte]](name, data) {
+class ByteArrayEntry(name: String, data: Array[Byte]) extends Entry(name, data) {
   val display_max = 16
 
   lazy val value: Array[Byte] = data
@@ -61,7 +61,7 @@ class ByteArrayEntry(name: String, data: Array[Byte]) extends Entry[Array[Byte]]
   }
 }
 
-class StringEntry(name: String, data: Array[Byte]) extends Entry[String](name, data) {
+class StringEntry(name: String, data: Array[Byte]) extends Entry(name, data) {
   lazy val value: String = getString
 
   override def toString: String = {
@@ -69,7 +69,7 @@ class StringEntry(name: String, data: Array[Byte]) extends Entry[String](name, d
   }
 }
 
-class RationalEntry(name: String, data: Array[Byte]) extends Entry[(Long, Long)](name, data) {
+class RationalEntry(name: String, data: Array[Byte]) extends Entry(name, data) {
   lazy val value = getRational
 
   override def toString: String = {
@@ -77,7 +77,7 @@ class RationalEntry(name: String, data: Array[Byte]) extends Entry[(Long, Long)]
   }
 }
 
-class MultiShortEntry(name: String, data: Array[Byte]) extends Entry[List[Short]](name, data) {
+class MultiShortEntry(name: String, data: Array[Byte]) extends Entry(name, data) {
   lazy val value = getShorts
 
   override def toString: String = {
@@ -85,7 +85,7 @@ class MultiShortEntry(name: String, data: Array[Byte]) extends Entry[List[Short]
   }
 }
 
-class MultiLongEntry(name: String, data: Array[Byte]) extends Entry[List[Long]](name, data) {
+class MultiLongEntry(name: String, data: Array[Byte]) extends Entry(name, data) {
   val value = getLongs
 
   override def toString: String = {
